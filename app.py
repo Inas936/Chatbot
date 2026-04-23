@@ -7,7 +7,7 @@ os.environ["OLLAMA_BASE_URL"] = "http://localhost:11434"
 
 st.set_page_config(layout="wide", page_title="RAG Nutrition Chatbot", page_icon="🥗")
 
-# Custom CSS للواجهة الجميلة
+# Custom CSS
 st.markdown("""
 <style>
     .stApp {
@@ -48,6 +48,14 @@ st.markdown("""
         border: 2px solid #00b894 !important;
     }
     
+    .info-box {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 10px 0;
+        border-left: 5px solid #00b894;
+    }
+    
     h1 {
         text-align: center !important;
         color: #00b894 !important;
@@ -59,7 +67,7 @@ st.title("🥗 RAG Chatbot - Nutrition Assistant")
 
 # فقرة تعريفية
 st.markdown("""
-<div style="background: white; padding: 20px; border-radius: 15px; margin: 10px 0; border-left: 5px solid #00b894;">
+<div class="info-box">
     <h3>🤖 Welcome to Nutrition Assistant Chatbot</h3>
     <p>This chatbot uses <strong>RAG (Retrieval-Augmented Generation)</strong> technology to answer your questions about healthy nutrition.</p>
     <p><strong>How can I help you?</strong><br>
@@ -69,19 +77,42 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# تحميل البيانات
+# تحميل البيانات - مع دعم عدة صيغ
 try:
     with open("healthy_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
-    st.success(f"✅ Loaded {len(data)} knowledge chunks")
+    
+    # معالجة البيانات بغض النظر عن نوعها
+    if isinstance(data, list):
+        chunks = data
+    elif isinstance(data, dict):
+        # إذا كان قاموس، حاول استخراج المحتوى
+        if "chunks" in data:
+            chunks = data["chunks"]
+        elif "data" in data:
+            chunks = data["data"]
+        else:
+            # خذ جميع القيم من القاموس
+            chunks = list(data.values())
+    else:
+        chunks = [str(data)]
+    
+    # تحويل جميع العناصر إلى نصوص
+    chunks = [str(chunk) for chunk in chunks if chunk]
+    
+    st.success(f"✅ Loaded {len(chunks)} knowledge chunks")
+    
 except FileNotFoundError:
     st.error("❌ File 'healthy_data.json' not found!")
     st.info("Please make sure the file exists in the same directory")
     st.stop()
+except json.JSONDecodeError:
+    st.error("❌ Invalid JSON format in 'healthy_data.json'")
+    st.stop()
 
 # استخدام نموذج أسرع
 llm = ChatOllama(
-    model="llama3.2:1b",  # أسرع من 3b
+    model="llama3.2:1b",
     temperature=0.1,
     num_predict=150
 )
@@ -103,8 +134,9 @@ if prompt := st.chat_input("Ask about healthy nutrition..."):
     
     with st.chat_message("assistant"):
         with st.spinner("🔍 Searching knowledge base..."):
-            # استخدام أول 10 chunks أو آخر 10 للحصول على سياق أفضل
-            context = "\n".join(data[:10])  # أول 10 chunks
+            # أخذ أول 10 chunks كسياق
+            context_chunks = chunks[:10]
+            context = "\n".join(context_chunks)
             
             response = llm.invoke(
                 f"""You are a nutrition expert. Use the following information to answer:
@@ -123,7 +155,7 @@ Answer helpfully (3-4 sentences):"""
 # شريط جانبي
 with st.sidebar:
     st.markdown("### 📊 Information")
-    st.metric("📚 Knowledge Chunks", len(data))
+    st.metric("📚 Knowledge Chunks", len(chunks))
     st.metric("🧠 Model", "llama3.2:1b")
     st.markdown("---")
     st.markdown("### 💡 Suggested Questions")
